@@ -1,8 +1,9 @@
 
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { Product } from '../types';
 import { Icons } from '../constants';
 import { generateProductImageSuggestion } from '../services/geminiService';
+import { getProducts, upsertProduct } from '../services/supabaseService';
 import AdBanner from '../components/AdBanner';
 
 const MOCK_PRODUCTS: Product[] = [
@@ -36,10 +37,12 @@ interface StoreProps {
 
 const Store: React.FC<StoreProps> = ({ formatPrice }) => {
   const [showListingForm, setShowListingForm] = useState(false);
-  const [products, setProducts] = useState<Product[]>(MOCK_PRODUCTS);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loadingProducts, setLoadingProducts] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [step, setStep] = useState(1); // 1: Info, 2: Photo, 3: AI Selection, 4: Evaluation Photos
   const [isGeneratingIA, setIsGeneratingIA] = useState(false);
+  const [isPublishing, setIsPublishing] = useState(false);
   
   const [formData, setFormData] = useState({
     name: '',
@@ -61,6 +64,16 @@ const Store: React.FC<StoreProps> = ({ formatPrice }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const evalInputRef = useRef<HTMLInputElement>(null);
   const currentEvalIdx = useRef<number>(0);
+
+  useEffect(() => {
+    const loadProducts = async () => {
+      setLoadingProducts(true);
+      const data = await getProducts();
+      setProducts(data && data.length > 0 ? data : MOCK_PRODUCTS);
+      setLoadingProducts(false);
+    };
+    loadProducts();
+  }, []);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -108,12 +121,13 @@ const Store: React.FC<StoreProps> = ({ formatPrice }) => {
     evalInputRef.current?.click();
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
+    setIsPublishing(true);
     const newProduct: Product = {
       id: `p${Date.now()}`,
       name: formData.name,
       price: parseFloat(formData.price),
-      seller: 'Tu (Vendedor)',
+      seller: localStorage.getItem('kimba_name') || 'Vendedor KIMBA',
       imageUrl: selectedPhoto || originalPhoto || `https://picsum.photos/seed/${formData.name}/500/500`,
       verified: false,
       description: formData.description,
@@ -121,7 +135,12 @@ const Store: React.FC<StoreProps> = ({ formatPrice }) => {
       mainBenefits: formData.mainBenefits,
       evaluationPhotos: evaluationPhotos.filter(p => p !== null) as string[]
     };
+
+    // Salvar no Supabase
+    await upsertProduct(newProduct);
+    
     setProducts([newProduct, ...products]);
+    setIsPublishing(false);
     resetForm();
   };
 
@@ -339,10 +358,14 @@ const Store: React.FC<StoreProps> = ({ formatPrice }) => {
 
             <button 
               onClick={handleSubmit}
-              disabled={evaluationPhotos.some(p => p === null)}
+              disabled={evaluationPhotos.some(p => p === null) || isPublishing}
               className="w-full py-5 bg-black dark:bg-white text-white dark:text-black font-black rounded-[2.5rem] shadow-2xl active:scale-95 transition-all disabled:opacity-30 disabled:grayscale"
             >
-              FINALIZAR E PUBLICAR
+              {isPublishing ? (
+                 <div className="w-5 h-5 border-3 border-current border-t-transparent rounded-full animate-spin" />
+              ) : (
+                 "FINALIZAR E PUBLICAR"
+              )}
             </button>
           </div>
         )}
@@ -381,7 +404,12 @@ const Store: React.FC<StoreProps> = ({ formatPrice }) => {
 
       <AdBanner />
 
-      {filteredProducts.length > 0 ? (
+      {loadingProducts ? (
+        <div className="py-20 flex flex-col items-center space-y-4">
+           <div className="w-10 h-10 border-4 border-[#E41B17] border-t-transparent rounded-full animate-spin" />
+           <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest">A Sincronizar Inventário...</p>
+        </div>
+      ) : filteredProducts.length > 0 ? (
         <div className="grid grid-cols-2 gap-x-4 gap-y-8">
           {filteredProducts.map(product => (
             <div key={product.id} className="group cursor-pointer space-y-3">
