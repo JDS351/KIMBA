@@ -1,0 +1,9 @@
+{
+  "name": "KIMBA",
+  "description": "Uma plataforma digital angolana moderna e sofisticada focada em conhecimento, mercado e serviços. Conhecimento que gera movimento.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone",
+    "geolocation"
+  ]
+}
