@@ -7,7 +7,7 @@ interface OnboardingProps {
   onComplete: (data: { name: string, email: string, interests: string[] }) => void;
 }
 
-type OnboardingStep = 'welcome' | 'identification' | 'verify' | 'interests';
+type OnboardingStep = 'welcome' | 'login_email' | 'login_otp' | 'identification' | 'verify' | 'interests';
 
 const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
   const [step, setStep] = useState<OnboardingStep>('welcome');
@@ -24,12 +24,10 @@ const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
   
   const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
 
-  // Geolocalização para país aproximado
   useEffect(() => {
     if ("geolocation" in navigator) {
-      navigator.geolocation.getCurrentPosition((position) => {
-        // Mock de geocoding aproximado: Em Angola latitudes são negativas e longitudes perto de 13-18
-        const { latitude, longitude } = position.coords;
+      navigator.geolocation.getCurrentPosition((pos) => {
+        const { latitude, longitude } = pos.coords;
         if (latitude < 0 && longitude > 10 && longitude < 25) {
           setCountry('Angola');
         }
@@ -53,30 +51,20 @@ const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
     }
   };
 
-  const toggleInterest = (id: string) => {
-    setSelectedInterests(prev => 
-      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
-    );
-  };
-
   const handleSyncIdentity = async () => {
     if (!idNumber) return;
     setIsScanning(true);
-    
-    // IA simula a recuperação de dados oficiais (OCR Virtual)
     const data = await extractDataFromID(idNumber, idType, country);
-    
-    if (data) {
+    if (data && data.isValidated) {
       setName(data.name);
       setEmail(data.email);
       setCountry(data.validatedCountry);
       setIdType(data.validatedDocType);
       setIsDataSynced(true);
+    } else {
+      alert("Documento não reconhecido. Use o formato oficial da República de Angola.");
     }
-    
-    setTimeout(() => {
-      setIsScanning(false);
-    }, 1500);
+    setTimeout(() => setIsScanning(false), 1500);
   };
 
   const verifyCode = () => {
@@ -85,7 +73,12 @@ const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
       setIsVerifying(true);
       setTimeout(() => {
         setIsVerifying(false);
-        setStep('interests');
+        if (step === 'login_otp') {
+          // Login direto simplificado
+          onComplete({ name: name || 'Utilizador', email, interests: ['tech', 'fin'] });
+        } else {
+          setStep('interests');
+        }
       }, 1000);
     }
   };
@@ -107,18 +100,58 @@ const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
               </p>
             </div>
             <div className="w-full max-w-xs space-y-4">
-              <button 
-                onClick={() => setStep('identification')}
-                className="w-full py-5 bg-black dark:bg-white text-white dark:text-black font-black rounded-[2.5rem] shadow-xl uppercase text-[10px] tracking-[0.2em] active:scale-95 transition-all"
-              >
+              <button onClick={() => setStep('identification')} className="w-full py-5 bg-black dark:bg-white text-white dark:text-black font-black rounded-[2.5rem] shadow-xl uppercase text-[10px] tracking-[0.2em]">
                 Criar Conta Grátis
               </button>
-              <button 
-                onClick={() => alert("Módulo de Login em desenvolvimento para o próximo sprint!")}
-                className="w-full py-5 bg-gray-50 dark:bg-gray-900 text-gray-400 font-black rounded-[2.5rem] border border-gray-100 dark:border-gray-800 uppercase text-[10px] tracking-[0.2em] active:scale-95 transition-all"
-              >
+              <button onClick={() => setStep('login_email')} className="w-full py-5 bg-gray-50 dark:bg-gray-900 text-gray-400 font-black rounded-[2.5rem] border border-gray-100 dark:border-gray-800 uppercase text-[10px] tracking-[0.2em]">
                 Já tenho conta (Login)
               </button>
+            </div>
+          </div>
+        );
+
+      case 'login_email':
+        return (
+          <div className="w-full max-w-md space-y-8 animate-in slide-in-from-right-4 duration-500">
+            <div className="space-y-2 text-center">
+              <h2 className="text-3xl font-black tracking-tighter uppercase leading-none text-black dark:text-white">Aceder</h2>
+              <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">Introduza o seu email registado</p>
+            </div>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-1">Endereço de Email</label>
+                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="seu@email.com" className="w-full bg-gray-50 dark:bg-gray-900 border-2 border-transparent focus:border-[#E41B17] rounded-3xl px-6 py-4 text-sm font-bold outline-none" />
+              </div>
+            </div>
+            <button onClick={() => { if(email.includes('@')) setStep('login_otp'); }} disabled={!email.includes('@')} className="w-full py-5 bg-[#E41B17] text-white font-black rounded-[2.5rem] shadow-2xl uppercase text-[10px] tracking-[0.2em] flex items-center justify-center space-x-3 disabled:bg-gray-200">
+              <span>Enviar Código</span>
+              <Icons.ArrowRight />
+            </button>
+            <button onClick={() => setStep('welcome')} className="w-full text-[9px] font-black text-gray-400 uppercase tracking-widest">Voltar</button>
+          </div>
+        );
+
+      case 'login_otp':
+      case 'verify':
+        return (
+          <div className="w-full max-w-md space-y-8 animate-in slide-in-from-right-4 duration-500 text-center">
+             <div className="space-y-2">
+              <h2 className="text-3xl font-black tracking-tighter uppercase leading-none text-black dark:text-white">Código OTP</h2>
+              <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest leading-relaxed">
+                Segurança em movimento.<br/>Enviamos o código para:<br/>
+                <span className="text-[#E41B17] lowercase font-medium">{email}</span>
+              </p>
+            </div>
+            <div className="flex justify-between gap-2 max-w-sm mx-auto">
+              {otp.map((digit, idx) => (
+                <input key={idx} ref={(el) => { otpRefs.current[idx] = el; }} type="text" inputMode="numeric" maxLength={1} value={digit} onChange={(e) => handleOtpChange(e.target.value, idx)} onKeyDown={(e) => handleOtpKeyDown(e, idx)} className="w-12 h-14 bg-gray-50 dark:bg-gray-900 border-2 border-transparent focus:border-[#FFCC00] rounded-2xl text-center text-xl font-black outline-none" />
+              ))}
+            </div>
+            <div className="pt-4 space-y-4">
+              <button onClick={verifyCode} disabled={otp.some(d => !d) || isVerifying} className="w-full py-5 bg-black dark:bg-white text-white dark:text-black font-black rounded-[2.5rem] shadow-xl uppercase text-[10px] tracking-[0.2em] flex items-center justify-center space-x-3 disabled:opacity-50">
+                {isVerifying ? <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin" /> : <span>Validar & Entrar</span>}
+              </button>
+              <button onClick={() => setStep('welcome')} className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Reiniciar</button>
             </div>
           </div>
         );
@@ -126,174 +159,80 @@ const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
       case 'identification':
         return (
           <div className="w-full max-w-md space-y-8 animate-in slide-in-from-right-4 duration-500">
-            <div className="space-y-2">
-              <h2 className="text-3xl font-black tracking-tighter uppercase leading-none">Identidade</h2>
+            <div className="space-y-2 text-center">
+              <h2 className="text-3xl font-black tracking-tighter uppercase leading-none text-black dark:text-white">Identidade</h2>
               <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">IA OCR + Autodeclaração</p>
             </div>
-            
             <div className="space-y-6">
                <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-1">País Emissor</label>
-                    <select 
-                      value={country}
-                      onChange={(e) => setCountry(e.target.value)}
-                      className="w-full bg-gray-50 dark:bg-gray-900 border-2 border-transparent focus:border-[#E41B17] rounded-3xl px-6 py-4 text-xs font-bold outline-none transition-all"
-                    >
+                    <select value={country} onChange={(e) => setCountry(e.target.value)} className="w-full bg-gray-50 dark:bg-gray-900 border-2 border-transparent focus:border-[#E41B17] rounded-3xl px-6 py-4 text-xs font-bold outline-none">
                       <option>Angola</option>
                       <option>Portugal</option>
                       <option>Brasil</option>
+                      <option>Cabo Verde</option>
                     </select>
                   </div>
                   <div className="space-y-2">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-1">Documento</label>
-                    <select 
-                      value={idType}
-                      onChange={(e) => setIdType(e.target.value)}
-                      className="w-full bg-gray-50 dark:bg-gray-900 border-2 border-transparent focus:border-[#E41B17] rounded-3xl px-6 py-4 text-xs font-bold outline-none transition-all"
-                    >
+                    <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-1">Tipo Documento</label>
+                    <select value={idType} onChange={(e) => setIdType(e.target.value)} className="w-full bg-gray-50 dark:bg-gray-900 border-2 border-transparent focus:border-[#E41B17] rounded-3xl px-6 py-4 text-xs font-bold outline-none">
                       <option>Bilhete de Identidade</option>
                       <option>Passaporte</option>
                       <option>Carta de Condução</option>
                     </select>
                   </div>
                </div>
-
                <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-1">Nº do Documento</label>
+                  <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-1">Número do Documento</label>
                   <div className="relative">
-                    <input 
-                      value={idNumber}
-                      onChange={(e) => setIdNumber(e.target.value)}
-                      placeholder="Introduza o número oficial" 
-                      className="w-full bg-gray-50 dark:bg-gray-900 border-2 border-transparent focus:border-[#E41B17] rounded-3xl px-6 py-4 text-sm font-bold outline-none transition-all"
-                    />
+                    <input value={idNumber} onChange={(e) => setIdNumber(e.target.value)} placeholder="Número oficial" className="w-full bg-gray-50 dark:bg-gray-900 border-2 border-transparent focus:border-[#E41B17] rounded-3xl px-6 py-4 text-sm font-bold outline-none" />
                     {!isDataSynced && (
-                      <button 
-                        onClick={handleSyncIdentity}
-                        disabled={idNumber.length < 5 || isScanning}
-                        className="absolute right-2 top-2 bottom-2 px-5 bg-[#E41B17] text-white rounded-2xl text-[8px] font-black uppercase tracking-widest active:scale-95 transition-all disabled:opacity-30 flex items-center space-x-2"
-                      >
-                        {isScanning ? (
-                          <div className="w-2 h-2 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                        ) : (
-                          <>
-                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
-                            <span>Escanear</span>
-                          </>
-                        )}
+                      <button onClick={handleSyncIdentity} disabled={idNumber.length < 5 || isScanning} className="absolute right-2 top-2 bottom-2 px-5 bg-[#E41B17] text-white rounded-2xl text-[8px] font-black uppercase tracking-widest active:scale-95 flex items-center space-x-2">
+                        {isScanning ? <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <span>Escanear</span>}
                       </button>
                     )}
                   </div>
                </div>
-
                {isDataSynced && (
                  <div className="space-y-5 animate-in fade-in slide-in-from-top-4 duration-500 pt-6 border-t border-gray-100 dark:border-gray-800">
-                    <div className="p-4 bg-green-50 dark:bg-green-950/20 rounded-2xl border border-green-100 dark:border-green-900/30 flex items-center space-x-3">
-                       <div className="w-8 h-8 rounded-full bg-green-500 flex items-center justify-center text-white">
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M20 6 9 17 4 12"/></svg>
-                       </div>
-                       <div>
-                          <p className="text-[10px] font-black uppercase tracking-widest text-green-600">OCR IA: {country} Validado</p>
-                          <p className="text-[8px] font-bold text-green-500/70 uppercase">República de Angola identificado com sucesso</p>
-                       </div>
+                    <div className="p-4 bg-green-50 dark:bg-green-950/20 rounded-2xl border border-green-100 dark:border-green-900/30 flex items-center space-x-3 text-green-600">
+                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M20 6 9 17 4 12"/></svg>
+                       <span className="text-[10px] font-black uppercase tracking-widest">Documento Validado: {country}</span>
                     </div>
-
                     <div className="space-y-4">
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-1">Autodeclaração: Nome Completo</label>
-                        <input 
-                          value={name}
-                          onChange={(e) => setName(e.target.value)}
-                          placeholder="Nome Completo" 
-                          className="w-full bg-gray-50 dark:bg-gray-900 border-2 border-transparent focus:border-[#E41B17] rounded-3xl px-6 py-4 text-sm font-bold outline-none transition-all"
-                        />
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-1">Nome Completo</label>
+                        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nome Completo" className="w-full bg-gray-50 dark:bg-gray-900 border-2 border-transparent focus:border-[#E41B17] rounded-3xl px-6 py-4 text-sm font-bold outline-none" />
                       </div>
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-1">Autodeclaração: Email</label>
-                        <input 
-                          value={email}
-                          onChange={(e) => setEmail(e.target.value)}
-                          placeholder="exemplo@email.com" 
-                          className="w-full bg-gray-50 dark:bg-gray-900 border-2 border-transparent focus:border-[#E41B17] rounded-3xl px-6 py-4 text-sm font-bold outline-none transition-all"
-                        />
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-1">Email Principal</label>
+                        <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="seu@email.com" className="w-full bg-gray-50 dark:bg-gray-900 border-2 border-transparent focus:border-[#E41B17] rounded-3xl px-6 py-4 text-sm font-bold outline-none" />
                       </div>
                     </div>
                  </div>
                )}
             </div>
-
-            <button 
-              onClick={() => setStep('verify')}
-              disabled={!isDataSynced || !name || !email}
-              className="w-full py-5 bg-[#E41B17] text-white font-black rounded-[2.5rem] shadow-2xl uppercase text-[10px] tracking-[0.2em] flex items-center justify-center space-x-3 disabled:bg-gray-200 dark:disabled:bg-gray-800"
-            >
-              <span>Validar Dados e Continuar</span>
-              <Icons.ArrowRight />
-            </button>
-          </div>
-        );
-
-      case 'verify':
-        return (
-          <div className="w-full max-w-md space-y-8 animate-in slide-in-from-right-4 duration-500 text-center">
-             <div className="space-y-2">
-              <h2 className="text-3xl font-black tracking-tighter uppercase leading-none">Validar Conta</h2>
-              <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest leading-relaxed">
-                Enviamos um código para:<br/>
-                <span className="text-[#E41B17] lowercase font-medium">{email}</span>
-              </p>
+            <div className="pt-4 flex flex-col space-y-4">
+              <button onClick={() => setStep('verify')} disabled={!isDataSynced || !name || !email} className="w-full py-5 bg-[#E41B17] text-white font-black rounded-[2.5rem] shadow-2xl uppercase text-[10px] tracking-[0.2em] flex items-center justify-center space-x-3 disabled:bg-gray-200">
+                <span>Confirmar Dados</span>
+                <Icons.ArrowRight />
+              </button>
+              <button onClick={() => setStep('welcome')} className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Voltar</button>
             </div>
-            
-            <div className="flex justify-between gap-2 max-w-sm mx-auto">
-              {otp.map((digit, idx) => (
-                <input
-                  key={idx}
-                  ref={(el) => { otpRefs.current[idx] = el; }}
-                  type="text"
-                  inputMode="numeric"
-                  maxLength={1}
-                  value={digit}
-                  onChange={(e) => handleOtpChange(e.target.value, idx)}
-                  onKeyDown={(e) => handleOtpKeyDown(e, idx)}
-                  className="w-12 h-14 bg-gray-50 dark:bg-gray-900 border-2 border-transparent focus:border-[#FFCC00] rounded-2xl text-center text-xl font-black outline-none transition-all"
-                />
-              ))}
-            </div>
-
-            <button 
-              onClick={verifyCode}
-              disabled={otp.some(d => !d) || isVerifying}
-              className="w-full py-5 bg-black dark:bg-white text-white dark:text-black font-black rounded-[2.5rem] shadow-xl uppercase text-[10px] tracking-[0.2em] flex items-center justify-center space-x-3 disabled:opacity-50"
-            >
-              {isVerifying ? (
-                <div className="w-4 h-4 border-2 border-white dark:border-black border-t-transparent rounded-full animate-spin" />
-              ) : (
-                <span>Ativar Perfil Digital</span>
-              )}
-            </button>
           </div>
         );
 
       case 'interests':
         return (
           <div className="w-full max-w-md space-y-10 animate-in slide-in-from-right-4 duration-500">
-            <div className="space-y-2">
-              <h2 className="text-3xl font-black tracking-tighter uppercase leading-none">Interesses</h2>
+            <div className="space-y-2 text-center">
+              <h2 className="text-3xl font-black tracking-tighter uppercase leading-none text-black dark:text-white">Interesses</h2>
               <p className="text-xs text-gray-500 font-bold uppercase tracking-widest">Personalize o seu ecossistema</p>
             </div>
-
             <div className="grid grid-cols-2 gap-3">
               {INTERESTS.map(interest => (
-                <button
-                  key={interest.id}
-                  onClick={() => toggleInterest(interest.id)}
-                  className={`p-4 rounded-[2rem] border-2 text-left flex flex-col justify-between h-28 transition-all duration-300 ${
-                    selectedInterests.includes(interest.id)
-                    ? 'border-[#E41B17] bg-[#E41B17]/5 text-[#E41B17]' 
-                    : 'border-gray-50 dark:border-gray-900 bg-gray-50 dark:bg-gray-900 text-gray-400'
-                  }`}
-                >
+                <button key={interest.id} onClick={() => setSelectedInterests(prev => prev.includes(interest.id) ? prev.filter(i => i !== interest.id) : [...prev, interest.id])} className={`p-4 rounded-[2rem] border-2 text-left flex flex-col justify-between h-28 transition-all duration-300 ${selectedInterests.includes(interest.id) ? 'border-[#E41B17] bg-[#E41B17]/5 text-[#E41B17]' : 'border-gray-50 dark:border-gray-900 bg-gray-50 dark:bg-gray-900 text-gray-400'}`}>
                   <div className="w-6 h-6 rounded-full border border-current flex items-center justify-center">
                     {selectedInterests.includes(interest.id) && <div className="w-3 h-3 bg-current rounded-full" />}
                   </div>
@@ -301,13 +240,8 @@ const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
                 </button>
               ))}
             </div>
-
-            <button
-              onClick={() => onComplete({ name, email, interests: selectedInterests })}
-              disabled={selectedInterests.length === 0}
-              className="w-full py-5 bg-[#E41B17] text-white font-black rounded-[2.5rem] shadow-2xl uppercase text-[10px] tracking-[0.2em] flex items-center justify-center space-x-3"
-            >
-              <span>Concluir Onboarding</span>
+            <button onClick={() => onComplete({ name, email, interests: selectedInterests })} disabled={selectedInterests.length === 0} className="w-full py-5 bg-[#E41B17] text-white font-black rounded-[2.5rem] shadow-2xl uppercase text-[10px] tracking-[0.2em] flex items-center justify-center space-x-3">
+              <span>Finalizar Registo</span>
               <Icons.ArrowRight />
             </button>
           </div>
@@ -316,7 +250,7 @@ const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
   };
 
   return (
-    <div className="min-h-screen flex flex-col justify-center items-center px-8 py-12 relative overflow-hidden">
+    <div className="min-h-screen flex flex-col justify-center items-center px-8 py-12 relative overflow-hidden bg-white dark:bg-black">
       <div className="absolute top-[-10%] right-[-10%] w-[40%] aspect-square bg-[#E41B17]/5 rounded-full blur-3xl -z-10" />
       <div className="absolute bottom-[-10%] left-[-10%] w-[40%] aspect-square bg-[#FFCC00]/5 rounded-full blur-3xl -z-10" />
       {renderStep()}

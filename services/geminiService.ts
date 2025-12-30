@@ -7,17 +7,20 @@ const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 /**
  * Simula a extração de dados de um documento de identidade (OCR IA) para autopreenchimento
  */
-export async function extractDataFromID(idNumber: string, idType: string, country: string): Promise<{ name: string, email: string, validatedCountry: string, validatedDocType: string } | null> {
+export async function extractDataFromID(idNumber: string, idType: string, country: string): Promise<{ name: string, email: string, validatedCountry: string, validatedDocType: string, isValidated: boolean } | null> {
   try {
-    const prompt = `Aja como um sistema de OCR e validação de identidade para Angola e outros países da CPLP. 
-    Analise o contexto: Número de Documento: ${idNumber}, Tipo pretendido: ${idType}, País sugerido: ${country}.
+    const prompt = `Aja como um sistema de OCR avançado para documentos oficiais.
+    Contexto do Documento: "${idNumber}".
+    Tipo pretendido pelo utilizador: "${idType}".
+    País sugerido: "${country}".
     
-    Regras:
-    1. Identifique se o documento corresponde a "República de Angola" ou outro país.
-    2. Identifique se é "Bilhete de Identidade", "Passaporte" ou "Carta de Condução".
-    3. Gere um nome completo e email fictício mas realista baseado na região.
+    Regras de Validação:
+    1. Verifique se no contexto "República de Angola" ou o país "${country}" é mencionado como emissor.
+    2. Identifique explicitamente o tipo de documento: "Bilhete de Identidade", "Passaporte" ou "Carta de Condução".
+    3. Se houver correspondência, retorne isValidated: true.
+    4. Gere um nome angolano/regional realista e um email baseado nesse nome.
     
-    Retorne apenas JSON com as chaves: name, email, validatedCountry, validatedDocType.`;
+    Retorne estritamente um JSON com as chaves: name, email, validatedCountry, validatedDocType, isValidated.`;
     
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
@@ -30,9 +33,10 @@ export async function extractDataFromID(idNumber: string, idType: string, countr
             name: { type: Type.STRING },
             email: { type: Type.STRING },
             validatedCountry: { type: Type.STRING },
-            validatedDocType: { type: Type.STRING }
+            validatedDocType: { type: Type.STRING },
+            isValidated: { type: Type.BOOLEAN }
           },
-          required: ["name", "email", "validatedCountry", "validatedDocType"]
+          required: ["name", "email", "validatedCountry", "validatedDocType", "isValidated"]
         }
       }
     });
@@ -45,53 +49,8 @@ export async function extractDataFromID(idNumber: string, idType: string, countr
 }
 
 /**
- * Busca cotações reais via Search Grounding
- */
-export async function fetchRealTimeMarketData(symbols: string[]): Promise<Record<string, { price: number, change: number }>> {
-  try {
-    const prompt = `Busque as cotações atuais (preço e variação percentual 24h) para os seguintes ativos: ${symbols.join(', ')}. 
-    Inclua dados da BODIVA para ativos angolanos, Pepperstone para ETFs, Blackrock para commodities e cotações de Cripto se necessário. 
-    Retorne um array de objetos contendo 'symbol', 'price' e 'change'.`;
-
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: prompt,
-      config: {
-        tools: [{ googleSearch: {} }],
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.ARRAY,
-          items: {
-            type: Type.OBJECT,
-            properties: {
-              symbol: { type: Type.STRING },
-              price: { type: Type.NUMBER },
-              change: { type: Type.NUMBER }
-            },
-            required: ["symbol", "price", "change"]
-          }
-        }
-      }
-    });
-
-    const result: Record<string, { price: number, change: number }> = {};
-    if (response.text) {
-      const items = JSON.parse(response.text);
-      if (Array.isArray(items)) {
-        items.forEach((item: any) => {
-          result[item.symbol] = { price: item.price, change: item.change };
-        });
-      }
-    }
-    return result;
-  } catch (error) {
-    console.error("Erro ao buscar dados de mercado via Gemini:", error);
-    return {};
-  }
-}
-
-/**
- * Busca notícias e fofocas com Search Grounding exaustivo
+ * Busca notícias e fofocas com Search Grounding exaustivo.
+ * O modo 'Novidades' agora é um motor de tendências abrangente (Viral/Trends).
  */
 export async function fetchCuratedNews(
   interests: string[], 
@@ -101,9 +60,24 @@ export async function fetchCuratedNews(
   limit: number = 5
 ): Promise<NewsItem[]> {
   try {
-    const contextPrompt = isNovidades 
-      ? `Você é um curador de tendências angolano. Varra o Google e redes sociais por novidades recentes em ${scope}. Gere ${limit} matérias.`
-      : `Você é um jornalista de elite angolano. Varra a web por notícias sérias sobre ${interests.join(', ')} em ${scope}. Gere ${limit} matérias.`;
+    let contextPrompt = "";
+    if (isNovidades) {
+      contextPrompt = `Você é o "KIMBA Trends Engine", o motor de busca de novidades mais avançado de Angola. 
+      Sua missão é varrer a web por tudo que é "Novo", "Viral" e "Tendência" em ${scope === 'Nacional' ? 'Angola (Local)' : 'o Mundo (Internacional)'}.
+      Não se limite apenas a fofoca; busque novidades em tecnologia, cultura, política (incluindo polêmicas de deputados), celebridades, moda, economia de rua e eventos de última hora.
+      
+      Fontes de busca obrigatórias:
+      - Redes Sociais: Facebook, Instagram, TikTok, X/Twitter (assuntos virais e hashtags em alta).
+      - Sites de Entretenimento e Fofoca de referência.
+      - Magazines de Estilo de Vida e Moda.
+      - Portais Oficiais e Jornais de grande circulação para novidades factuais e polêmicas públicas.
+      
+      Gere ${limit} matérias dinâmicas, com títulos provocativos e imagens descritivas. 
+      Retorne estritamente um JSON.`;
+    } else {
+      contextPrompt = `Você é um jornalista de elite. Varra a web por notícias sérias, econômicas e políticas de alta relevância em ${scope}. 
+      Use fontes de referência jornalística. Gere ${limit} matérias.`;
+    }
 
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
@@ -138,6 +112,7 @@ export async function fetchCuratedNews(
       groundingSources: response.candidates?.[0]?.groundingMetadata?.groundingChunks || []
     }));
   } catch (error) {
+    console.error("Erro ao buscar notícias:", error);
     return [];
   }
 }
@@ -158,7 +133,7 @@ export async function generateInvestmentInsight(): Promise<InvestmentInsight> {
   try {
     const response = await ai.models.generateContent({
       model: "gemini-3-pro-preview",
-      contents: "Gere um Insight de Investimento para o mercado Angolano hoje (BODIVA/Câmbio). Formate como JSON.",
+      contents: "Gere um Insight de Investimento para o mercado Angolano hoje. Formate como JSON.",
       config: {
         tools: [{ googleSearch: {} }],
         responseMimeType: "application/json",
@@ -194,35 +169,73 @@ export async function askKimbaAI(history: ChatMessage[], userInput: string, imag
   });
 }
 
-/**
- * Gera uma sugestão de imagem profissional para um produto
- */
-export async function generateProductImageSuggestion(base64Data: string, productName: string, mimeType: string): Promise<string | null> {
+export async function fetchRealTimeMarketData(symbols: string[]): Promise<Record<string, { price: number, change: number }>> {
   try {
+    const prompt = `Busque as cotações atuais para os seguintes ativos: ${symbols.join(', ')}. 
+    Retorne um array de objetos JSON contendo 'symbol', 'price' e 'change'.`;
+
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash-image',
-      contents: {
-        parts: [
-          { inlineData: { data: base64Data, mimeType } },
-          { text: `Gere uma versão profissional desta imagem para o produto: ${productName}.` }
-        ]
+      model: "gemini-3-flash-preview",
+      contents: prompt,
+      config: {
+        tools: [{ googleSearch: {} }],
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              symbol: { type: Type.STRING },
+              price: { type: Type.NUMBER },
+              change: { type: Type.NUMBER }
+            },
+            required: ["symbol", "price", "change"]
+          }
+        }
       }
     });
 
-    for (const part of response.candidates?.[0]?.content?.parts || []) {
-      if (part.inlineData) {
-        return `data:image/png;base64,${part.inlineData.data}`;
+    const result: Record<string, { price: number, change: number }> = {};
+    if (response.text) {
+      const items = JSON.parse(response.text);
+      if (Array.isArray(items)) {
+        items.forEach((item: any) => {
+          result[item.symbol] = { price: item.price, change: item.change };
+        });
       }
     }
-    return null;
+    return result;
   } catch (error) {
-    return null;
+    return {};
   }
 }
 
-/**
- * Analisa os arredores de um imóvel usando Maps Grounding
- */
+export async function fetchTransportRealtimeInfo(providerName: string, transportType: string): Promise<string> {
+  try {
+    const response = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: `Forneça o status em tempo real sobre a operadora ${providerName} (${transportType}) em Angola hoje.`,
+      config: { tools: [{ googleSearch: {} }] }
+    });
+    return response.text || "Sem info.";
+  } catch (error) {
+    return "Erro.";
+  }
+}
+
+export async function fetchMaritimeAdvisory(): Promise<string> {
+  try {
+    const response = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: "Forneça um boletim marítimo atualizado para a costa de Angola hoje.",
+      config: { tools: [{ googleSearch: {} }] }
+    });
+    return response.text || "Sem boletim.";
+  } catch (error) {
+    return "Erro.";
+  }
+}
+
 export async function analyzePropertySurroundings(location: string, lat?: number, lng?: number): Promise<{text?: string, chunks: any[]}> {
   try {
     const contents = `Analise os arredores de ${location} em Angola.`;
@@ -242,42 +255,29 @@ export async function analyzePropertySurroundings(location: string, lat?: number
       chunks: response.candidates?.[0]?.groundingMetadata?.groundingChunks || []
     };
   } catch (error) {
-    return { text: "Erro na análise.", chunks: [] };
+    return { text: "Erro.", chunks: [] };
   }
 }
 
-/**
- * Busca status em tempo real de transportes via Search Grounding
- */
-export async function fetchTransportRealtimeInfo(providerName: string, transportType: string): Promise<string> {
+export async function generateProductImageSuggestion(base64Data: string, productName: string, mimeType: string): Promise<string | null> {
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: `Forneça o status em tempo real e notícias recentes sobre a operadora de transporte ${providerName} (${transportType}) em Angola. Foque em disponibilidade e alertas de hoje.`,
-      config: {
-        tools: [{ googleSearch: {} }]
+      model: 'gemini-2.5-flash-image',
+      contents: {
+        parts: [
+          { inlineData: { data: base64Data, mimeType } },
+          { text: `Enhance this image into a professional studio shot for "${productName}".` }
+        ]
       }
     });
-    return response.text || "Informação indisponível no momento.";
-  } catch (error) {
-    return "Erro ao consultar status em tempo real.";
-  }
-}
-
-/**
- * Busca avisos marítimos recentes via Search Grounding
- */
-export async function fetchMaritimeAdvisory(): Promise<string> {
-  try {
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: "Forneça um boletim marítimo atualizado para a costa de Angola, incluindo Luanda e Cabinda. Mencione estado do mar e avisos aos navegantes.",
-      config: {
-        tools: [{ googleSearch: {} }]
+    const candidates = response.candidates || [];
+    if (candidates.length > 0) {
+      for (const part of candidates[0].content.parts) {
+        if (part.inlineData) return `data:image/png;base64,${part.inlineData.data}`;
       }
-    });
-    return response.text || "Boletim marítimo indisponível.";
+    }
+    return null;
   } catch (error) {
-    return "Erro ao obter boletim marítimo.";
+    return null;
   }
 }

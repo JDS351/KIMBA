@@ -83,6 +83,7 @@ export interface Product {
   description?: string;
   technicalFeatures?: string;
   mainBenefits?: string;
+  evaluationPhotos?: string[];
 }
 
 export interface Property {

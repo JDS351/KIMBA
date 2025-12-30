@@ -38,7 +38,7 @@ const Store: React.FC<StoreProps> = ({ formatPrice }) => {
   const [showListingForm, setShowListingForm] = useState(false);
   const [products, setProducts] = useState<Product[]>(MOCK_PRODUCTS);
   const [searchTerm, setSearchTerm] = useState('');
-  const [step, setStep] = useState(1); // 1: Info, 2: Photo, 3: AI Selection
+  const [step, setStep] = useState(1); // 1: Info, 2: Photo, 3: AI Selection, 4: Evaluation Photos
   const [isGeneratingIA, setIsGeneratingIA] = useState(false);
   
   const [formData, setFormData] = useState({
@@ -56,8 +56,11 @@ const Store: React.FC<StoreProps> = ({ formatPrice }) => {
   const [originalPhoto, setOriginalPhoto] = useState<string | null>(null);
   const [aiSuggestion, setAiSuggestion] = useState<string | null>(null);
   const [selectedPhoto, setSelectedPhoto] = useState<string | null>(null);
+  const [evaluationPhotos, setEvaluationPhotos] = useState<(string | null)[]>([null, null, null, null]);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const evalInputRef = useRef<HTMLInputElement>(null);
+  const currentEvalIdx = useRef<number>(0);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -74,7 +77,6 @@ const Store: React.FC<StoreProps> = ({ formatPrice }) => {
         setStep(3);
         setIsGeneratingIA(true);
         
-        // Extrair apenas os dados base64 (removendo o prefixo data:image/...)
         const base64Data = base64.split(',')[1];
         const suggestion = await generateProductImageSuggestion(base64Data, formData.name, file.type);
         
@@ -83,6 +85,27 @@ const Store: React.FC<StoreProps> = ({ formatPrice }) => {
       };
       reader.readAsDataURL(file);
     }
+  };
+
+  const handleEvalPhotoCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64 = reader.result as string;
+        setEvaluationPhotos(prev => {
+          const updated = [...prev];
+          updated[currentEvalIdx.current] = base64;
+          return updated;
+        });
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const triggerEvalCapture = (index: number) => {
+    currentEvalIdx.current = index;
+    evalInputRef.current?.click();
   };
 
   const handleSubmit = () => {
@@ -95,7 +118,8 @@ const Store: React.FC<StoreProps> = ({ formatPrice }) => {
       verified: false,
       description: formData.description,
       technicalFeatures: formData.technicalFeatures,
-      mainBenefits: formData.mainBenefits
+      mainBenefits: formData.mainBenefits,
+      evaluationPhotos: evaluationPhotos.filter(p => p !== null) as string[]
     };
     setProducts([newProduct, ...products]);
     resetForm();
@@ -118,6 +142,7 @@ const Store: React.FC<StoreProps> = ({ formatPrice }) => {
     setOriginalPhoto(null);
     setAiSuggestion(null);
     setSelectedPhoto(null);
+    setEvaluationPhotos([null, null, null, null]);
   };
 
   const filteredProducts = useMemo(() => {
@@ -178,21 +203,6 @@ const Store: React.FC<StoreProps> = ({ formatPrice }) => {
                   <textarea name="mainBenefits" value={formData.mainBenefits} onChange={handleInputChange} rows={3} className="w-full bg-white dark:bg-black border border-gray-100 dark:border-gray-800 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#E41B17] transition-all resize-none" placeholder="Por que o cliente deve comprar este produto?" />
                 </div>
               </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1 ml-1">Localização</label>
-                  <input name="location" value={formData.location} onChange={handleInputChange} className="w-full bg-white dark:bg-black border border-gray-100 dark:border-gray-800 rounded-2xl px-4 py-3 text-sm" placeholder="Luanda..." />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1 ml-1">Unidades</label>
-                  <input type="number" name="units" value={formData.units} onChange={handleInputChange} className="w-full bg-white dark:bg-black border border-gray-100 dark:border-gray-800 rounded-2xl px-4 py-3 text-sm" placeholder="0" />
-                </div>
-              </div>
-              <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1 ml-1">Prazo de Entrega</label>
-                <input name="deliveryTime" value={formData.deliveryTime} onChange={handleInputChange} className="w-full bg-white dark:bg-black border border-gray-100 dark:border-gray-800 rounded-2xl px-4 py-3 text-sm" placeholder="Ex: 24h" />
-              </div>
             </div>
             <button 
               onClick={() => setStep(2)}
@@ -211,8 +221,8 @@ const Store: React.FC<StoreProps> = ({ formatPrice }) => {
                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
             </div>
             <div className="space-y-2">
-              <h3 className="text-xl font-black">Tire uma foto do seu produto</h3>
-              <p className="text-sm text-gray-500 max-w-xs mx-auto">Fotos reais ajudam na confiança. A nossa IA cuidará do resto.</p>
+              <h3 className="text-xl font-black">Foto Principal</h3>
+              <p className="text-sm text-gray-500 max-w-xs mx-auto">Tire uma foto clara do seu produto para o destaque principal.</p>
             </div>
             <input 
               type="file" 
@@ -235,12 +245,11 @@ const Store: React.FC<StoreProps> = ({ formatPrice }) => {
         {step === 3 && (
           <div className="space-y-8 animate-in slide-in-from-right-4">
             <div className="text-center">
-              <h3 className="text-xl font-black">Escolha a melhor apresentação</h3>
-              <p className="text-sm text-gray-500">Selecione a foto que será exibida no mercado.</p>
+              <h3 className="text-xl font-black uppercase tracking-tighter">Capa do Produto</h3>
+              <p className="text-sm text-gray-500">Escolha como o produto aparecerá no mercado.</p>
             </div>
 
             <div className="grid grid-cols-1 gap-6">
-              {/* Original Photo */}
               <div 
                 onClick={() => setSelectedPhoto(originalPhoto)}
                 className={`relative rounded-[2.5rem] overflow-hidden border-4 transition-all cursor-pointer ${selectedPhoto === originalPhoto ? 'border-[#E41B17] scale-[1.02]' : 'border-transparent opacity-70'}`}
@@ -249,7 +258,6 @@ const Store: React.FC<StoreProps> = ({ formatPrice }) => {
                 <div className="absolute top-4 left-4 bg-black/50 backdrop-blur-md text-white text-[10px] font-bold px-3 py-1 rounded-full">FOTO ORIGINAL</div>
               </div>
 
-              {/* AI Suggestion */}
               <div 
                 onClick={() => aiSuggestion && setSelectedPhoto(aiSuggestion)}
                 className={`relative rounded-[2.5rem] overflow-hidden border-4 transition-all cursor-pointer min-h-[200px] flex items-center justify-center bg-gray-50 dark:bg-gray-900 ${selectedPhoto === aiSuggestion ? 'border-[#FFCC00] scale-[1.02]' : 'border-transparent opacity-70'}`}
@@ -257,25 +265,84 @@ const Store: React.FC<StoreProps> = ({ formatPrice }) => {
                 {isGeneratingIA ? (
                   <div className="flex flex-col items-center space-y-4">
                     <div className="w-10 h-10 border-4 border-[#FFCC00] border-t-transparent rounded-full animate-spin" />
-                    <p className="text-[10px] font-black uppercase tracking-widest text-[#FFCC00]">Estúdio IA a processar...</p>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-[#FFCC00]">KIMBA AI Studio...</p>
                   </div>
                 ) : aiSuggestion ? (
                   <>
                     <img src={aiSuggestion} className="w-full aspect-video object-cover" />
-                    <div className="absolute top-4 left-4 bg-[#FFCC00] text-black text-[10px] font-black px-3 py-1 rounded-full">KIMBA AI STUDIO</div>
+                    <div className="absolute top-4 left-4 bg-[#FFCC00] text-black text-[10px] font-black px-3 py-1 rounded-full">VERSÃO STUDIO AI</div>
                   </>
                 ) : (
-                  <p className="text-xs font-bold text-gray-400">Falha ao gerar sugestão IA</p>
+                  <p className="text-xs font-bold text-gray-400">Sugestão não disponível</p>
                 )}
               </div>
             </div>
 
             <button 
-              onClick={handleSubmit}
+              onClick={() => setStep(4)}
               disabled={!selectedPhoto && !originalPhoto}
               className="w-full py-5 bg-[#E41B17] text-white font-black rounded-[2.5rem] shadow-2xl active:scale-95 transition-all mt-6"
             >
-              FINALIZAR E DIVULGAR
+              PRÓXIMO: AVALIAÇÃO DE QUALIDADE
+            </button>
+          </div>
+        )}
+
+        {/* Step 4: Evaluation Photos (4 Unedited) */}
+        {step === 4 && (
+          <div className="space-y-8 animate-in slide-in-from-right-4">
+            <div className="text-center space-y-2">
+              <h3 className="text-xl font-black uppercase tracking-tighter">Avaliação de Qualidade</h3>
+              <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest leading-relaxed">
+                Adicione 4 fotos reais e sem edição.<br/>O cliente usará estas fotos para validar a qualidade.
+              </p>
+            </div>
+
+            <input 
+              type="file" 
+              accept="image/*" 
+              capture="environment" 
+              className="hidden" 
+              ref={evalInputRef}
+              onChange={handleEvalPhotoCapture}
+            />
+
+            <div className="grid grid-cols-2 gap-4">
+               {evaluationPhotos.map((photo, idx) => (
+                 <button 
+                  key={idx}
+                  onClick={() => triggerEvalCapture(idx)}
+                  className={`aspect-square rounded-[2rem] border-2 border-dashed flex items-center justify-center overflow-hidden transition-all relative ${photo ? 'border-[#E41B17]' : 'border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900'}`}
+                 >
+                   {photo ? (
+                     <img src={photo} className="w-full h-full object-cover" />
+                   ) : (
+                     <div className="flex flex-col items-center space-y-2 text-gray-300">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                        <span className="text-[8px] font-black uppercase tracking-widest">Foto {idx + 1}</span>
+                     </div>
+                   )}
+                   {photo && (
+                     <div className="absolute bottom-2 right-2 bg-[#E41B17] text-white p-1 rounded-full">
+                        <Icons.Check />
+                     </div>
+                   )}
+                 </button>
+               ))}
+            </div>
+
+            <div className="bg-orange-50 dark:bg-orange-900/10 p-6 rounded-3xl border border-orange-100 dark:border-orange-900/30">
+               <p className="text-[9px] text-orange-600 dark:text-orange-400 font-medium italic leading-relaxed">
+                 Nota: Estas fotos serão exibidas em uma galeria secundária como "Prova de Qualidade". Devem ser capturadas em ambiente natural sem filtros.
+               </p>
+            </div>
+
+            <button 
+              onClick={handleSubmit}
+              disabled={evaluationPhotos.some(p => p === null)}
+              className="w-full py-5 bg-black dark:bg-white text-white dark:text-black font-black rounded-[2.5rem] shadow-2xl active:scale-95 transition-all disabled:opacity-30 disabled:grayscale"
+            >
+              FINALIZAR E PUBLICAR
             </button>
           </div>
         )}
@@ -310,17 +377,8 @@ const Store: React.FC<StoreProps> = ({ formatPrice }) => {
           onChange={(e) => setSearchTerm(e.target.value)}
           className="w-full bg-gray-50 dark:bg-gray-900 border-2 border-transparent focus:border-[#E41B17]/20 focus:bg-white dark:focus:bg-black rounded-[1.5rem] pl-14 pr-6 py-4 text-sm font-medium outline-none transition-all shadow-sm"
         />
-        {searchTerm && (
-          <button 
-            onClick={() => setSearchTerm('')}
-            className="absolute inset-y-0 right-5 flex items-center text-gray-400 hover:text-black dark:hover:text-white transition-colors"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg>
-          </button>
-        )}
       </div>
 
-      {/* AdBanner fixado abaixo da barra de pesquisa */}
       <AdBanner />
 
       {filteredProducts.length > 0 ? (
@@ -356,17 +414,8 @@ const Store: React.FC<StoreProps> = ({ formatPrice }) => {
           ))}
         </div>
       ) : (
-        <div className="py-20 text-center space-y-4 animate-in fade-in duration-500">
-          <div className="w-16 h-16 bg-gray-50 dark:bg-gray-900 rounded-full flex items-center justify-center mx-auto text-gray-300">
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-          </div>
+        <div className="py-20 text-center space-y-4">
           <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Nenhum produto encontrado.</p>
-          <button 
-            onClick={() => setSearchTerm('')}
-            className="text-[10px] font-black text-[#E41B17] uppercase tracking-widest hover:underline"
-          >
-            Limpar Pesquisa
-          </button>
         </div>
       )}
     </div>
