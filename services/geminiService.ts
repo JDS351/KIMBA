@@ -5,7 +5,47 @@ import { NewsItem, NewsScope, ChatMessage, InvestmentInsight } from "../types";
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 /**
- * Busca cotações reais via Search Grounding para ativos complexos
+ * Simula a extração de dados de um documento de identidade (OCR IA) para autopreenchimento
+ */
+export async function extractDataFromID(idNumber: string, idType: string, country: string): Promise<{ name: string, email: string, validatedCountry: string, validatedDocType: string } | null> {
+  try {
+    const prompt = `Aja como um sistema de OCR e validação de identidade para Angola e outros países da CPLP. 
+    Analise o contexto: Número de Documento: ${idNumber}, Tipo pretendido: ${idType}, País sugerido: ${country}.
+    
+    Regras:
+    1. Identifique se o documento corresponde a "República de Angola" ou outro país.
+    2. Identifique se é "Bilhete de Identidade", "Passaporte" ou "Carta de Condução".
+    3. Gere um nome completo e email fictício mas realista baseado na região.
+    
+    Retorne apenas JSON com as chaves: name, email, validatedCountry, validatedDocType.`;
+    
+    const response = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            name: { type: Type.STRING },
+            email: { type: Type.STRING },
+            validatedCountry: { type: Type.STRING },
+            validatedDocType: { type: Type.STRING }
+          },
+          required: ["name", "email", "validatedCountry", "validatedDocType"]
+        }
+      }
+    });
+
+    return response.text ? JSON.parse(response.text) : null;
+  } catch (error) {
+    console.error("Erro no processamento OCR/IA:", error);
+    return null;
+  }
+}
+
+/**
+ * Busca cotações reais via Search Grounding
  */
 export async function fetchRealTimeMarketData(symbols: string[]): Promise<Record<string, { price: number, change: number }>> {
   try {
@@ -155,7 +195,7 @@ export async function askKimbaAI(history: ChatMessage[], userInput: string, imag
 }
 
 /**
- * Gera uma sugestão de imagem profissional para um produto usando IA
+ * Gera uma sugestão de imagem profissional para um produto
  */
 export async function generateProductImageSuggestion(base64Data: string, productName: string, mimeType: string): Promise<string | null> {
   try {
@@ -164,7 +204,7 @@ export async function generateProductImageSuggestion(base64Data: string, product
       contents: {
         parts: [
           { inlineData: { data: base64Data, mimeType } },
-          { text: `Gere uma versão profissional e atraente desta imagem para o produto: ${productName}. Melhore a iluminação e o fundo para um estilo de estúdio de e-commerce.` }
+          { text: `Gere uma versão profissional desta imagem para o produto: ${productName}.` }
         ]
       }
     });
@@ -176,44 +216,7 @@ export async function generateProductImageSuggestion(base64Data: string, product
     }
     return null;
   } catch (error) {
-    console.error("Erro ao gerar imagem IA:", error);
     return null;
-  }
-}
-
-/**
- * Busca status em tempo real de transportes via Search Grounding
- */
-export async function fetchTransportRealtimeInfo(providerName: string, type: 'aéreo' | 'marítimo'): Promise<string> {
-  try {
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: `Busque o status atualizado de voos ou viagens para a operadora ${providerName} (${type}) em Angola hoje. Verifique atrasos, cancelamentos ou avisos importantes nos sites oficiais e notícias recentes. Responda em Português de Angola de forma concisa.`,
-      config: {
-        tools: [{ googleSearch: {} }],
-      },
-    });
-    return response.text || "Sem informações disponíveis no momento.";
-  } catch (error) {
-    return "Erro ao consultar status em tempo real.";
-  }
-}
-
-/**
- * Gera um boletim marítimo atualizado via Search Grounding
- */
-export async function fetchMaritimeAdvisory(): Promise<string> {
-  try {
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: "Busque o boletim marítimo atualizado para a costa de Angola hoje. Inclua estado do mar, ventos e avisos para navegação (especialmente Catamarãs em Luanda). Responda de forma técnica mas compreensível.",
-      config: {
-        tools: [{ googleSearch: {} }],
-      },
-    });
-    return response.text || "Boletim indisponível.";
-  } catch (error) {
-    return "Erro ao buscar boletim marítimo.";
   }
 }
 
@@ -222,35 +225,59 @@ export async function fetchMaritimeAdvisory(): Promise<string> {
  */
 export async function analyzePropertySurroundings(location: string, lat?: number, lng?: number): Promise<{text?: string, chunks: any[]}> {
   try {
-    const contents = `Analise os arredores de ${location} em Angola. Quais são os principais pontos de interesse próximos (escolas, hospitais, lazer, supermercados)?`;
-    
-    const config: any = {
-      tools: [{ googleMaps: {} }],
-    };
-
+    const contents = `Analise os arredores de ${location} em Angola.`;
+    const config: any = { tools: [{ googleMaps: {} }] };
     if (lat && lng) {
       config.toolConfig = {
-        retrievalConfig: {
-          latLng: {
-            latitude: lat,
-            longitude: lng
-          }
-        }
+        retrievalConfig: { latLng: { latitude: lat, longitude: lng } }
       };
     }
-
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash-preview-09-2025",
       contents,
       config,
     });
-
     return {
       text: response.text,
       chunks: response.candidates?.[0]?.groundingMetadata?.groundingChunks || []
     };
   } catch (error) {
-    console.error("Erro ao analisar arredores:", error);
     return { text: "Erro na análise.", chunks: [] };
+  }
+}
+
+/**
+ * Busca status em tempo real de transportes via Search Grounding
+ */
+export async function fetchTransportRealtimeInfo(providerName: string, transportType: string): Promise<string> {
+  try {
+    const response = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: `Forneça o status em tempo real e notícias recentes sobre a operadora de transporte ${providerName} (${transportType}) em Angola. Foque em disponibilidade e alertas de hoje.`,
+      config: {
+        tools: [{ googleSearch: {} }]
+      }
+    });
+    return response.text || "Informação indisponível no momento.";
+  } catch (error) {
+    return "Erro ao consultar status em tempo real.";
+  }
+}
+
+/**
+ * Busca avisos marítimos recentes via Search Grounding
+ */
+export async function fetchMaritimeAdvisory(): Promise<string> {
+  try {
+    const response = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: "Forneça um boletim marítimo atualizado para a costa de Angola, incluindo Luanda e Cabinda. Mencione estado do mar e avisos aos navegantes.",
+      config: {
+        tools: [{ googleSearch: {} }]
+      }
+    });
+    return response.text || "Boletim marítimo indisponível.";
+  } catch (error) {
+    return "Erro ao obter boletim marítimo.";
   }
 }

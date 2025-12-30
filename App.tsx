@@ -96,7 +96,7 @@ const App: React.FC = () => {
       syncHiredServices(userEmail, hiredServices);
       syncTransactions(userEmail, transactions);
     }
-  }, [balance, hiredServices, transactions, userInterests, currency, favorites]);
+  }, [balance, hiredServices, transactions, userInterests, currency, favorites, userName]);
 
   useEffect(() => {
     if (isDarkMode) {
@@ -168,6 +168,11 @@ const App: React.FC = () => {
     setView(View.NEWS);
   };
 
+  const handleUpdateName = (newName: string) => {
+    setUserName(newName);
+    localStorage.setItem('kimba_name', newName);
+  };
+
   const renderView = () => {
     switch (view) {
       case View.ONBOARDING: return <Onboarding onComplete={handleOnboardingComplete} />;
@@ -178,7 +183,7 @@ const App: React.FC = () => {
       case View.REAL_ESTATE: return <RealEstate formatPrice={formatPrice} properties={properties} setProperties={setProperties} loading={loadingProps} favorites={favorites} toggleFavorite={toggleFavorite} />;
       case View.SERVICES: return <Services balance={balance} handlePayment={() => true} formatPrice={formatPrice} hiredServices={hiredServices} onConfirmCompletion={() => {}} />;
       case View.WALLET: return <Wallet balance={balance} currency={currency} transactions={transactions} onDeposit={() => {}} onWithdraw={() => true} onBack={() => setView(View.PROFILE)} />;
-      case View.PROFILE: return <Profile isDarkMode={isDarkMode} toggleTheme={toggleTheme} userName={userName} interests={userInterests} balance={balance} currency={currency} formatPrice={formatPrice} onCurrencyChange={(c) => setCurrency(c)} goToWallet={() => setView(View.WALLET)} favorites={favorites} allProperties={properties} toggleFavorite={toggleFavorite} resetApp={() => { localStorage.clear(); window.location.reload(); }} />;
+      case View.PROFILE: return <Profile isDarkMode={isDarkMode} toggleTheme={toggleTheme} userName={userName} userEmail={userEmail} interests={userInterests} balance={balance} currency={currency} formatPrice={formatPrice} onCurrencyChange={(c) => setCurrency(c)} onUpdateName={handleUpdateName} goToWallet={() => setView(View.WALLET)} favorites={favorites} allProperties={properties} toggleFavorite={toggleFavorite} resetApp={() => { localStorage.clear(); window.location.reload(); }} />;
       default: return <News userInterests={userInterests} />;
     }
   };
@@ -217,8 +222,8 @@ const App: React.FC = () => {
             </div>
           </header>
 
-          {/* Manípulo Pull-Down Kimba Invest */}
-          {!isInvest && view !== View.ONBOARDING && (
+          {/* Manípulo Pull-Down Kimba Invest - Removed redundant View.ONBOARDING comparison inside narrowed block */}
+          {!isInvest && (
             <div 
               onTouchStart={handleTouchStart}
               onTouchMove={handleTouchMove}
